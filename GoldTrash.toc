@@ -1,0 +1,10 @@
+## Category: Utils by Naeriam
+## Interface: 120100
+## Title: Gold |cFFFFD100Trash|r
+## Author: Velhari-LosErrantes EU
+## Version: 0.1
+## IconTexture: Interface\Icons\inv_misc_coin_01
+## Notes: Highlights valuable trash and profession items in the loot window. Type /goldtrash to configure.
+## SavedVariables: GoldTrashDB
+
+GoldTrash.lua
