@@ -1,3 +1,4 @@
-# WoW Patch 12.1.5
+# GoldTrash 0.2
 
-- Interface number updated
+- New option to auto-loot gold, silver and copper (enabled by default)
+- Chat notice with the amount of money looted

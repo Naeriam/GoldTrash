@@ -10,6 +10,7 @@ local DEFAULTS = {
     highlightProfession = true,  -- Green background on profession items
     announce            = true,  -- Print highlighted items in chat
     autoLoot            = false, -- Auto-loot highlighted items
+    autoLootMoney       = true,  -- Auto-loot gold, silver and copper
 }
 
 local db
@@ -38,13 +39,15 @@ local L = {
     MIN_GOLD       = "Minimum vendor value for poor items (gold):",
     HL_TRASH       = "Gold background on poor items above the minimum",
     HL_PROFESSION  = "Green background on profession items",
-    ANNOUNCE       = "Announce highlighted items in chat",
+    ANNOUNCE       = "Announce highlighted items and looted money in chat",
     AUTOLOOT       = "Auto-loot highlighted items",
-    AUTOLOOT_NOTE  = "Only works when the game's own auto-loot is off.",
+    AUTOLOOT_MONEY = "Auto-loot gold, silver and copper",
+    AUTOLOOT_NOTE  = "Auto-loot options only work when the game's own auto-loot is off.",
     LOADED         = "Loaded. Type |cffffff00/goldtrash|r to configure.",
     VALUABLE       = "Valuable trash",
     PROFESSION     = "Profession item",
     LOOTED         = "Auto-looted",
+    MONEY          = "Money looted",
 }
 
 local locale = GetLocale()
@@ -52,13 +55,15 @@ if locale == "esES" or locale == "esMX" then
     L.MIN_GOLD      = "Valor mínimo en vendedor de objetos pobres (oro):"
     L.HL_TRASH      = "Fondo dorado en objetos pobres que superen el mínimo"
     L.HL_PROFESSION = "Fondo verde en objetos de profesión"
-    L.ANNOUNCE      = "Avisar en el chat de los objetos marcados"
+    L.ANNOUNCE      = "Avisar en el chat de los objetos marcados y del dinero"
     L.AUTOLOOT      = "Despojar automáticamente los objetos marcados"
-    L.AUTOLOOT_NOTE = "Solo funciona si el despojo automático del juego está desactivado."
+    L.AUTOLOOT_MONEY = "Despojar automáticamente el oro, la plata y el cobre"
+    L.AUTOLOOT_NOTE = "El despojo automático solo funciona si el del juego está desactivado."
     L.LOADED        = "Cargado. Escribe |cffffff00/goldtrash|r para configurarlo."
     L.VALUABLE      = "Basura valiosa"
     L.PROFESSION    = "Objeto de profesión"
     L.LOOTED        = "Despojado"
+    L.MONEY         = "Dinero despojado"
 end
 
 local PREFIX = "|cffffd100[GoldTrash]|r "
@@ -185,6 +190,19 @@ end
 -- Announce + auto-loot
 -------------------------------------------------------
 local processedThisLoot = false -- LOOT_READY can fire more than once per loot
+local moneyBefore             -- GetMoney() before looting coins, nil when not tracking
+local lootSession = 0         -- Invalidates stale "stop tracking money" timers
+
+-- Print how much money the last PLAYER_MONEY gave us while looting
+local function AnnounceMoney()
+    if not moneyBefore then return end
+    local now = GetMoney()
+    local gained = now - moneyBefore
+    moneyBefore = now
+    if gained > 0 then
+        print(PREFIX .. string.format("|c%s%s:|r %s", COLORS.trash.hex, L.MONEY, GetMoneyString(gained, true)))
+    end
+end
 
 local function ProcessLoot(gameAutoLoot)
     if processedThisLoot then return end
@@ -192,12 +210,17 @@ local function ProcessLoot(gameAutoLoot)
 
     local doAnnounce = db.announce
     local doLoot = db.autoLoot and not gameAutoLoot
-    if not doAnnounce and not doLoot then return end
+    local doLootMoney = db.autoLootMoney and not gameAutoLoot
+    if not doAnnounce and not doLoot and not doLootMoney then return end
 
     -- Iterate backwards so looting a slot doesn't shift the remaining ones
     for slot = GetNumLootItems(), 1, -1 do
         local kind, _, link, quantity = ClassifySlot(slot)
-        if kind then
+        if GetLootSlotType(slot) == Enum.LootSlotType.Money then
+            -- Track money for the chat notice, whoever loots it (us or the game)
+            if doAnnounce then moneyBefore = moneyBefore or GetMoney() end
+            if doLootMoney then LootSlot(slot) end
+        elseif kind then
             local color = COLORS[kind]
             local label = kind == "trash" and L.VALUABLE or L.PROFESSION
             local qty = (quantity and quantity > 1) and (" x" .. quantity) or ""
@@ -238,7 +261,7 @@ end
 
 local function CreateConfigFrame()
     local cf = CreateFrame("Frame", "GoldTrashConfigFrame", UIParent, "BasicFrameTemplateWithInset")
-    cf:SetSize(400, 250)
+    cf:SetSize(420, 280)
     cf:SetPoint("CENTER")
     cf:SetFrameStrata("DIALOG")
     cf:SetMovable(true)
@@ -291,10 +314,11 @@ local function CreateConfigFrame()
     local cb1 = CreateCheckbox(cf, L.HL_TRASH, "highlightTrash", spacer, 0)
     local cb2 = CreateCheckbox(cf, L.HL_PROFESSION, "highlightProfession", cb1)
     local cb3 = CreateCheckbox(cf, L.ANNOUNCE, "announce", cb2)
-    local cb4 = CreateCheckbox(cf, L.AUTOLOOT, "autoLoot", cb3)
+    local cb4 = CreateCheckbox(cf, L.AUTOLOOT_MONEY, "autoLootMoney", cb3)
+    local cb5 = CreateCheckbox(cf, L.AUTOLOOT, "autoLoot", cb4)
 
     local note = cf:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    note:SetPoint("TOPLEFT", cb4, "BOTTOMLEFT", 30, 0)
+    note:SetPoint("TOPLEFT", cb5, "BOTTOMLEFT", 30, 0)
     note:SetText(L.AUTOLOOT_NOTE)
 
     -- Color legend on the checkboxes
@@ -322,6 +346,7 @@ SlashCmdList["GOLDTRASH"] = ToggleConfig
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("LOOT_READY")
 f:RegisterEvent("LOOT_CLOSED")
+f:RegisterEvent("PLAYER_MONEY")
 
 f:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -335,9 +360,18 @@ f:SetScript("OnEvent", function(_, event, arg1)
         f:UnregisterEvent("ADDON_LOADED")
 
     elseif event == "LOOT_READY" and db then
+        lootSession = lootSession + 1
         ProcessLoot(arg1)
+
+    elseif event == "PLAYER_MONEY" then
+        AnnounceMoney()
 
     elseif event == "LOOT_CLOSED" then
         processedThisLoot = false
+        -- Money can arrive right after the window closes; stop tracking a bit later
+        local session = lootSession
+        C_Timer.After(1.5, function()
+            if session == lootSession then moneyBefore = nil end
+        end)
     end
 end)

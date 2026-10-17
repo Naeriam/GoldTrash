@@ -9,8 +9,11 @@ When you open a corpse, the loot window highlights:
 Type `/goldtrash` in chat to open the options window:
 - Minimum vendor value (in gold) for poor items
 - Toggle each highlight on or off
-- Announce highlighted items in chat
-- Auto-loot highlighted items (only when the game's own auto-loot is off)
+- Announce highlighted items and looted money in chat
+- Auto-loot gold, silver and copper (enabled by default)
+- Auto-loot highlighted items
+
+Auto-loot options only work when the game's own auto-loot is off.
 
 ## Considerations
 - The vendor value takes the whole stack into account (price × quantity)

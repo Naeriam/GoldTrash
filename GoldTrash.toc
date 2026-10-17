@@ -3,7 +3,7 @@
 ## X-Curse-Project-ID: 1728841
 ## Title: Gold |cFFFFD100Trash|r
 ## Author: Velhari-LosErrantes EU
-## Version: 0.1
+## Version: 0.2
 ## IconTexture: Interface\Icons\inv_misc_coin_01
 ## Notes: Highlights valuable trash and profession items in the loot window. Type /goldtrash to configure.
 ## SavedVariables: GoldTrashDB
